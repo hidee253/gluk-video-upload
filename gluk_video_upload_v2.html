@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>gluk — video upload</title>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap');
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --black: #0a0a0a; --white: #fafafa; --gray-1: #f4f4f2; --gray-2: #e8e8e5;
+    --gray-4: #888884; --gray-5: #444440;
+    --success: #2a6e4a; --success-bg: #e8f5ee;
+    --error: #8b2020; --error-bg: #fceaea;
+    --info: #1a4a6e; --info-bg: #e8f0f8;
+    --font: "DM Sans", system-ui, sans-serif;
+    --mono: "DM Mono", monospace;
+    --radius: 8px; --radius-lg: 14px;
+  }
+  body { font-family: var(--font); background: var(--white); color: var(--black); min-height: 100vh; font-size: 14px; line-height: 1.6; }
+  header { background: var(--black); color: var(--white); padding: 20px 32px; display: flex; align-items: baseline; gap: 12px; }
+  header h1 { font-size: 18px; font-weight: 400; }
+  header span { font-size: 12px; color: #888; font-family: var(--mono); }
+  .container { max-width: 800px; margin: 0 auto; padding: 32px 24px; }
+  .config-card { background: var(--white); border: 1px solid var(--gray-2); border-radius: var(--radius-lg); padding: 24px; margin-bottom: 24px; }
+  .config-card h2 { font-size: 11px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gray-4); margin-bottom: 16px; }
+  .field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
+  .field label { font-size: 11px; font-weight: 500; color: var(--gray-4); letter-spacing: 0.05em; text-transform: uppercase; }
+  .field textarea { font-family: var(--font); font-size: 13px; padding: 9px 12px; border: 1px solid var(--gray-2); border-radius: var(--radius); background: var(--gray-1); color: var(--black); width: 100%; resize: vertical; min-height: 80px; line-height: 1.5; }
+  .field textarea:focus { outline: none; border-color: var(--gray-5); background: var(--white); }
+  button { font-family: var(--font); font-size: 13px; font-weight: 500; padding: 9px 18px; border-radius: var(--radius); border: 1px solid var(--gray-2); background: var(--white); color: var(--black); cursor: pointer; transition: all 0.15s; }
+  button:hover { background: var(--gray-1); }
+  button.primary { background: var(--black); color: var(--white); border-color: var(--black); }
+  button.primary:hover { opacity: 0.85; }
+  button.primary:disabled { opacity: 0.4; cursor: not-allowed; }
+  .status { font-size: 12px; padding: 8px 12px; border-radius: var(--radius); margin-top: 10px; }
+  .status.info { background: var(--info-bg); color: var(--info); }
+  .status.success { background: var(--success-bg); color: var(--success); }
+  .status.error { background: var(--error-bg); color: var(--error); }
+
+  /* Login scherm */
+  .login-screen { text-align: center; padding: 60px 24px; }
+  .login-screen .logo { font-size: 32px; margin-bottom: 8px; }
+  .login-screen h2 { font-size: 20px; font-weight: 400; margin-bottom: 8px; }
+  .login-screen p { font-size: 13px; color: var(--gray-4); margin-bottom: 32px; }
+  .login-user { display: flex; align-items: center; gap: 10px; padding: 10px 16px; background: var(--gray-1); border-radius: var(--radius); font-size: 13px; margin-bottom: 16px; }
+  .login-user img { width: 32px; height: 32px; border-radius: 50%; }
+  .login-user .user-info { text-align: left; }
+  .login-user .user-name { font-weight: 500; color: var(--black); }
+  .login-user .user-email { font-size: 11px; color: var(--gray-4); }
+  .btn-signout { font-size: 11px; padding: 4px 10px; margin-left: auto; }
+
+  /* Upload zone */
+  .upload-zone { border: 2px dashed var(--gray-2); border-radius: var(--radius-lg); padding: 40px 24px; text-align: center; cursor: pointer; transition: all 0.2s; background: var(--gray-1); }
+  .upload-zone:hover, .upload-zone.drag-over { border-color: var(--black); background: var(--white); }
+  .upload-zone .uz-icon { font-size: 32px; margin-bottom: 10px; }
+  .upload-zone .uz-label { font-size: 14px; font-weight: 500; color: var(--black); margin-bottom: 4px; }
+  .upload-zone .uz-sub { font-size: 12px; color: var(--gray-4); }
+  #file-input { display: none; }
+
+  /* Video preview */
+  .video-preview { margin-top: 16px; display: none; }
+  .video-preview video { width: 100%; border-radius: var(--radius); max-height: 220px; background: #000; }
+  .video-info { margin-top: 8px; font-size: 11px; font-family: var(--mono); color: var(--gray-5); display: flex; gap: 16px; flex-wrap: wrap; }
+
+  /* Tags */
+  .tag-label { font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em; color: var(--gray-4); margin-bottom: 6px; display: block; }
+  .tags-grid { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  .tag-chip { font-size: 11px; padding: 4px 10px; border-radius: 20px; border: 1px solid var(--gray-2); background: var(--gray-1); color: var(--gray-5); cursor: pointer; transition: all 0.15s; user-select: none; }
+  .tag-chip:hover { border-color: var(--gray-5); color: var(--black); }
+  .tag-chip.active { background: var(--black); color: var(--white); border-color: var(--black); }
+  .tag-extra { width: 100%; font-family: var(--font); font-size: 12px; padding: 6px 9px; border: 1px solid var(--gray-2); border-radius: 6px; background: var(--gray-1); color: var(--black); margin-top: 4px; }
+  .tag-extra:focus { outline: none; border-color: var(--gray-5); background: var(--white); }
+  .tag-extra::placeholder { color: var(--gray-4); }
+  .selects { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+  .selects > div { display: flex; flex-direction: column; gap: 4px; }
+  select { font-family: var(--font); font-size: 11px; padding: 6px 8px; border: 1px solid var(--gray-2); border-radius: 6px; background: var(--gray-1); color: var(--black); width: 100%; }
+
+  /* Progress */
+  .progress-wrap { margin-top: 12px; display: none; }
+  .progress-bar { height: 4px; background: var(--gray-2); border-radius: 2px; overflow: hidden; }
+  .progress-fill { height: 100%; background: var(--black); border-radius: 2px; transition: width 0.2s; width: 0%; }
+  .progress-label { font-size: 11px; font-family: var(--mono); color: var(--gray-4); margin-top: 4px; }
+
+  /* History */
+  .history-item { border: 1px solid var(--gray-2); border-radius: var(--radius); padding: 12px 16px; margin-bottom: 8px; font-size: 12px; }
+  .history-item .hi-name { font-family: var(--mono); font-weight: 500; color: var(--black); margin-bottom: 4px; }
+  .history-item .hi-meta { color: var(--gray-4); font-size: 11px; }
+  .history-item.ok { border-color: #7dc9a0; background: var(--success-bg); }
+
+  #upload-section { display: none; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>gluk vakantiehuis</h1>
+  <span>video upload</span>
+</header>
+
+<div class="container">
+
+  <!-- LOGIN SCHERM -->
+  <div id="login-section">
+    <div class="login-screen">
+      <div class="logo">🎬</div>
+      <h2>Video uploaden</h2>
+      <p>Log in met je Google account om video's te uploaden naar Drive en de Sheet bij te werken.</p>
+      <div id="g_id_onload"
+        data-client_id="889720988332-tamhka2qnnf496n6425tah4bb2aoch4o.apps.googleusercontent.com"
+        data-callback="onGoogleSignIn"
+        data-auto_select="true">
+      </div>
+      <div class="g_id_signin"
+        data-type="standard"
+        data-size="large"
+        data-theme="outline"
+        data-text="sign_in_with"
+        data-shape="rectangular"
+        data-logo_alignment="left">
+      </div>
+      <div id="login-status"></div>
+    </div>
+  </div>
+
+  <!-- UPLOAD SECTIE -->
+  <div id="upload-section">
+
+    <!-- Ingelogde gebruiker -->
+    <div class="config-card" id="user-card" style="padding:14px 20px;">
+      <div class="login-user">
+        <img id="user-avatar" src="" alt="">
+        <div class="user-info">
+          <div class="user-name" id="user-name"></div>
+          <div class="user-email" id="user-email"></div>
+        </div>
+        <button class="btn-signout" onclick="signOut()">Uitloggen</button>
+      </div>
+    </div>
+
+    <div class="config-card">
+      <h2>Video selecteren</h2>
+      <div class="upload-zone" id="upload-zone" onclick="document.getElementById('file-input').click()" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)">
+        <div class="uz-icon">🎬</div>
+        <div class="uz-label">Klik om video te kiezen</div>
+        <div class="uz-sub">of sleep het bestand hiernaartoe · mp4, mov, m4v</div>
+      </div>
+      <input type="file" id="file-input" accept="video/*" onchange="onFileSelect(event)">
+      <div class="video-preview" id="video-preview">
+        <video id="video-player" controls muted playsinline></video>
+        <div class="video-info" id="video-info"></div>
+      </div>
+    </div>
+
+    <div class="config-card" id="meta-section" style="display:none;">
+      <h2>Beschrijving & metadata</h2>
+      <div class="field">
+        <label>Beschrijving</label>
+        <div style="position:relative;">
+          <textarea id="beschrijving" placeholder="Wat zie je in de video? Context voor de caption-generator..." style="padding-right:52px;"></textarea>
+          <button id="mic-btn" onclick="toggleSpeech()" title="Inspreken" style="position:absolute;right:8px;bottom:8px;padding:0;font-size:18px;border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;border:1px solid var(--gray-2);background:var(--gray-1);cursor:pointer;">🎙️</button>
+        </div>
+        <div id="speech-status" style="font-size:11px;color:var(--gray-4);margin-top:4px;display:none;">● Aan het luisteren...</div>
+      </div>
+      <div class="field" style="margin-top:4px;">
+        <span class="tag-label">Trefwoorden</span>
+        <div class="tags-grid" id="tags-grid"></div>
+        <input type="text" class="tag-extra" id="tag-extra" placeholder="extra trefwoorden, kommagescheiden...">
+      </div>
+      <div class="selects">
+        <div>
+          <span class="tag-label">Seizoen</span>
+          <select id="sel-seizoen">
+            <option value="seizoensneutraal">seizoensneutraal</option>
+            <option value="lente">lente</option>
+            <option value="zomer">zomer</option>
+            <option value="herfst">herfst</option>
+            <option value="winter">winter</option>
+          </select>
+        </div>
+        <div>
+          <span class="tag-label">Sfeer</span>
+          <select id="sel-sfeer">
+            <option value="rustig">rustig</option>
+            <option value="energiek">energiek</option>
+            <option value="intiem">intiem</option>
+            <option value="feestelijk">feestelijk</option>
+            <option value="inspirerend">inspirerend</option>
+          </select>
+        </div>
+        <div>
+          <span class="tag-label">Mensen</span>
+          <select id="sel-mensen">
+            <option value="nee">nee</option>
+            <option value="ja">ja</option>
+          </select>
+        </div>
+      </div>
+      <div class="progress-wrap" id="progress-wrap">
+        <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+        <div class="progress-label" id="progress-label">Uploaden...</div>
+      </div>
+      <div id="upload-status"></div>
+      <div style="margin-top:16px;">
+        <button class="primary" id="upload-btn" onclick="startUpload()">↑ Uploaden naar Drive</button>
+      </div>
+    </div>
+
+    <div class="config-card" id="history-section" style="display:none;">
+      <h2>Geüpload deze sessie</h2>
+      <div id="history-list"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ── CONFIGURATIE ──────────────────────────────────────────────────
+const CLIENT_ID = "889720988332-tamhka2qnnf496n6425tah4bb2aoch4o.apps.googleusercontent.com";
+const DRIVE_FOLDER_ID = "1k-sZKRoSJGEOzW4mkxBf029-cLx1Wm7Z";
+const WEBHOOK_URL = "https://hook.eu1.make.com/yss25xcz7qmu4iimu8ezl117h6mfavyr";
+const SCOPES = "https://www.googleapis.com/auth/drive.file";
+
+// ── STATE ─────────────────────────────────────────────────────────
+let accessToken = null;
+let tokenClient = null;
+let selectedFile = null;
+let activeTags = new Set();
+let uploadHistory = [];
+
+const TAGS = [
+  "zwembad","sauna","haard","tuin","interieur","architectuur",
+  "keuken","slaapkamer","badkamer","terras",
+  "natuur","westhoek","velden","bossen","water","bloemen","sneeuw",
+  "licht","details","avond","ochtend","zonsondergang","nacht","zwembadverlichting",
+  "samenzijn","ontbijt","rust","stilte","warmte","gezelligheid",
+  "fiets","bbq","teppanyaki","vuurschaal",
+  "kinderen","familie","koppel","beweging"
+];
+
+// ── HELPERS ───────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+function setStatus(id, msg, type) {
+  $(id).innerHTML = msg ? `<div class="status ${type}">${msg}</div>` : "";
+}
+function formatBytes(b) {
+  if (b < 1024*1024) return (b/1024).toFixed(1) + " KB";
+  return (b/(1024*1024)).toFixed(1) + " MB";
+}
+function formatDatum() {
+  return new Date().toLocaleString("nl-BE", {day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"});
+}
+
+// ── GOOGLE SIGN-IN ────────────────────────────────────────────────
+function onGoogleSignIn(response) {
+  // Decode JWT om gebruikersinfo te tonen
+  const payload = JSON.parse(atob(response.credential.split('.')[1]));
+  showUserInfo(payload.name, payload.email, payload.picture);
+
+  // Haal access token op via token client
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: SCOPES,
+    callback: (tokenResponse) => {
+      if (tokenResponse.error) {
+        setStatus("login-status", "Fout bij inloggen: " + tokenResponse.error, "error");
+        return;
+      }
+      accessToken = tokenResponse.access_token;
+      // Stel automatische vernieuwing in (token vervalt na 1 uur)
+      setTimeout(refreshToken, 55 * 60 * 1000);
+      showUploadSection();
+    }
+  });
+  tokenClient.requestAccessToken({ prompt: '' });
+}
+
+function refreshToken() {
+  if (!tokenClient) return;
+  tokenClient.requestAccessToken({ prompt: '' });
+  setTimeout(refreshToken, 55 * 60 * 1000);
+}
+
+function showUserInfo(name, email, picture) {
+  $("user-name").textContent = name;
+  $("user-email").textContent = email;
+  if (picture) $("user-avatar").src = picture;
+}
+
+function showUploadSection() {
+  $("login-section").style.display = "none";
+  $("upload-section").style.display = "block";
+  buildTagChips();
+}
+
+function signOut() {
+  google.accounts.id.disableAutoSelect();
+  accessToken = null;
+  $("upload-section").style.display = "none";
+  $("login-section").style.display = "block";
+  selectedFile = null;
+}
+
+// ── TAG CHIPS ─────────────────────────────────────────────────────
+function buildTagChips() {
+  const grid = $("tags-grid");
+  grid.innerHTML = [...new Set(TAGS)].map(tag =>
+    `<span class="tag-chip" data-tag="${tag}" onclick="toggleTag('${tag}')">${tag}</span>`
+  ).join("");
+}
+
+function toggleTag(tag) {
+  activeTags.has(tag) ? activeTags.delete(tag) : activeTags.add(tag);
+  document.querySelectorAll(".tag-chip").forEach(chip => {
+    chip.classList.toggle("active", activeTags.has(chip.dataset.tag));
+  });
+}
+
+function getTrefwoorden() {
+  const chips = [...activeTags];
+  const extra = $("tag-extra").value.split(",").map(t => t.trim()).filter(Boolean);
+  return [...chips, ...extra].join(", ");
+}
+
+// ── DRAG & DROP ───────────────────────────────────────────────────
+function onDragOver(e) { e.preventDefault(); $("upload-zone").classList.add("drag-over"); }
+function onDragLeave(e) { $("upload-zone").classList.remove("drag-over"); }
+function onDrop(e) {
+  e.preventDefault();
+  $("upload-zone").classList.remove("drag-over");
+  const file = e.dataTransfer.files[0];
+  if (file && file.type.startsWith("video/")) loadFile(file);
+}
+function onFileSelect(e) {
+  const file = e.target.files[0];
+  if (file) loadFile(file);
+}
+function loadFile(file) {
+  selectedFile = file;
+  $("video-player").src = URL.createObjectURL(file);
+  $("video-preview").style.display = "block";
+  $("video-info").innerHTML = `<span>📄 ${file.name}</span><span>📦 ${formatBytes(file.size)}</span>`;
+  $("meta-section").style.display = "block";
+  setStatus("upload-status","","");
+}
+
+// ── UPLOAD ────────────────────────────────────────────────────────
+async function startUpload() {
+  if (!selectedFile) { setStatus("upload-status","Geen video geselecteerd","error"); return; }
+  if (!accessToken) { setStatus("upload-status","Niet ingelogd","error"); return; }
+
+  const btn = $("upload-btn");
+  btn.disabled = true;
+  btn.textContent = "Bezig...";
+  $("progress-wrap").style.display = "block";
+  setProgress(0, "Uploaden naar Drive...");
+  setStatus("upload-status","","");
+
+  try {
+    // Stap 1: Drive upload
+    const initResp = await fetch(
+      "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,name",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+          "X-Upload-Content-Type": selectedFile.type,
+          "X-Upload-Content-Length": selectedFile.size
+        },
+        body: JSON.stringify({ name: selectedFile.name, parents: [DRIVE_FOLDER_ID] })
+      }
+    );
+    if (initResp.status === 401) throw new Error("Sessie verlopen — log opnieuw in");
+    if (!initResp.ok) throw new Error("Drive fout: " + initResp.status);
+
+    const uploadUrl = initResp.headers.get("Location");
+    if (!uploadUrl) throw new Error("Geen upload URL ontvangen");
+
+    setProgress(10, "Bestand uploaden...");
+    const fileId = await uploadWithProgress(uploadUrl, selectedFile, (pct) => {
+      setProgress(10 + pct * 0.8, `Uploaden... ${Math.round(pct)}%`);
+    });
+
+    setProgress(92, "Metadata doorsturen...");
+
+    // Stap 2: Webhook naar Make
+    const nu = formatDatum();
+    const webhookResp = await fetch(WEBHOOK_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        datum: nu,
+        bestandsnaam: selectedFile.name,
+        drive_link: `https://drive.google.com/file/d/${fileId}/view`,
+        file_id: fileId,
+        beschrijving: $("beschrijving").value.trim(),
+        trefwoorden: getTrefwoorden(),
+        seizoen: $("sel-seizoen").value,
+        sfeer: $("sel-sfeer").value,
+        mensen: $("sel-mensen").value
+      })
+    });
+    if (!webhookResp.ok) throw new Error("Make webhook fout: " + webhookResp.status);
+
+    setProgress(100, "Klaar!");
+    setStatus("upload-status",
+      `✓ Geüpload — <a href="https://drive.google.com/file/d/${fileId}/view" target="_blank" style="color:var(--success);">Bekijk in Drive</a>`,
+      "success"
+    );
+    addToHistory(selectedFile.name, getTrefwoorden(), `https://drive.google.com/file/d/${fileId}/view`);
+    resetForm();
+
+  } catch(e) {
+    setStatus("upload-status", "Fout: " + e.message, "error");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "↑ Uploaden naar Drive";
+  }
+}
+
+function uploadWithProgress(url, file, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", url);
+    xhr.setRequestHeader("Content-Type", file.type);
+    xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress((e.loaded/e.total)*100); };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try { resolve(JSON.parse(xhr.responseText).id); }
+        catch(e) { reject(new Error("Onverwacht antwoord")); }
+      } else { reject(new Error("Upload mislukt: HTTP " + xhr.status)); }
+    };
+    xhr.onerror = () => reject(new Error("Netwerkfout"));
+    xhr.send(file);
+  });
+}
+
+function setProgress(pct, label) {
+  $("progress-fill").style.width = pct + "%";
+  $("progress-label").textContent = label;
+}
+
+function addToHistory(naam, trefwoorden, link) {
+  uploadHistory.unshift({ naam, trefwoorden, link, tijd: formatDatum() });
+  $("history-section").style.display = "block";
+  $("history-list").innerHTML = uploadHistory.map(h => `
+    <div class="history-item ok">
+      <div class="hi-name"><a href="${h.link}" target="_blank" style="color:var(--success);text-decoration:none;">↗ ${h.naam}</a></div>
+      <div class="hi-meta">${h.trefwoorden || "geen trefwoorden"} · ${h.tijd}</div>
+    </div>
+  `).join("");
+}
+
+function resetForm() {
+  selectedFile = null;
+  activeTags.clear();
+  $("file-input").value = "";
+  $("video-preview").style.display = "none";
+  $("video-player").src = "";
+  $("beschrijving").value = "";
+  $("tag-extra").value = "";
+  $("sel-seizoen").value = "seizoensneutraal";
+  $("sel-sfeer").value = "rustig";
+  $("sel-mensen").value = "nee";
+  $("progress-wrap").style.display = "none";
+  $("meta-section").style.display = "none";
+  document.querySelectorAll(".tag-chip").forEach(c => c.classList.remove("active"));
+}
+
+// ── SPRAAK-NAAR-TEKST ─────────────────────────────────────────────
+let recognition = null;
+let isListening = false;
+
+function toggleSpeech() {
+  if (!("webkitSpeechRecognition" in window) && !("SpeechRecognition" in window)) {
+    alert("Spraakherkenning werkt alleen in Chrome.");
+    return;
+  }
+  isListening ? stopSpeech() : startSpeech();
+}
+
+function startSpeech() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  recognition = new SR();
+  recognition.lang = "nl-BE";
+  recognition.continuous = true;
+  recognition.interimResults = true;
+
+  const textarea = $("beschrijving");
+  const micBtn = $("mic-btn");
+  const statusEl = $("speech-status");
+  let finalTranscript = textarea.value;
+
+  recognition.onstart = () => {
+    isListening = true;
+    micBtn.textContent = "⏹️";
+    micBtn.style.background = "#fceaea";
+    micBtn.style.borderColor = "#e57373";
+    statusEl.style.display = "block";
+    statusEl.style.color = "#8b2020";
+    statusEl.textContent = "● Aan het luisteren...";
+  };
+
+  recognition.onresult = (e) => {
+    let interim = "";
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      if (e.results[i].isFinal) {
+        finalTranscript += e.results[i][0].transcript + " ";
+      } else {
+        interim += e.results[i][0].transcript;
+      }
+    }
+    textarea.value = finalTranscript + interim;
+  };
+
+  recognition.onend = () => {
+    isListening = false;
+    micBtn.textContent = "🎙️";
+    micBtn.style.background = "var(--gray-1)";
+    micBtn.style.borderColor = "var(--gray-2)";
+    statusEl.style.display = "none";
+    textarea.value = finalTranscript.trim();
+  };
+
+  recognition.onerror = (e) => {
+    isListening = false;
+    stopSpeech();
+    statusEl.textContent = "Fout: " + e.error;
+    statusEl.style.display = "block";
+    statusEl.style.color = "#8b2020";
+    setTimeout(() => { statusEl.style.display = "none"; }, 4000);
+  };
+
+  recognition.start();
+}
+
+function stopSpeech() {
+  if (recognition) { recognition.stop(); recognition = null; }
+}
+</script>
+</body>
+</html>
